@@ -1,0 +1,192 @@
+%General Mission Analysis Tool(GMAT) Script
+% Variable vs fixed drag area: how much does a time-varying cross-section
+% change the propagated orbit, compared with a fixed-area (cannonball) model?
+%
+% Three identical spacecraft start on the same orbit with the same mass and Cd:
+%   Sat_Var     - "truth". DragArea is updated every 60 s from a simple
+%                 rotating-array model:
+%                     A = Abody + Apanel * |cos(u + phi)|
+%                 u   = argument of latitude (AOP + TA), so the array goes
+%                       face-on to the flow twice per orbit
+%                 phi = phase offset: where in the orbit the array is face-on
+%   Sat_FixMean - fixed area equal to the orbit average of that model
+%                 (Abody + Apanel * 2/pi)
+%   Sat_FixMax  - fixed area equal to the maximum (array face-on to the flow),
+%                 i.e. what a quick worst-case analysis would assume
+%
+% Defaults reuse the 7-day racer: Abody = Apanel = 1 m^2, Cd = 2.2 and
+% DryMass = 1375.4 kg give a MEAN ballistic coefficient of 382 kg/m^2.
+% Force model, epoch and orbit match Deorbit_BC_Sweep.script.
+%
+% Output: VarArea_StateLog.txt, one row every 60 s, NO header. Columns:
+%  1 ElapsedDays | 2 Var DragArea | 3-5 Altitude of Var, FixMean, FixMax
+%  6-8 SMA of Var, FixMean, FixMax
+%  9-14 Var X Y Z VX VY VZ | 15-20 FixMean X..VZ | 21-26 FixMax X..VZ
+% Analyse it with analyse_variable_area.py.
+%
+% TO CHANGE ALTITUDE: edit SMA in all three spacecraft (6378.1363 + h) and
+% raise Tend (e.g. 30 days at 500 km). Nothing else needs to change.
+
+%----------------------------------------
+%---------- Spacecraft
+%----------------------------------------
+
+Create Spacecraft Sat_Var;
+GMAT Sat_Var.DateFormat = UTCGregorian;
+GMAT Sat_Var.Epoch = '25 Jan 2025 00:00:00.000';
+GMAT Sat_Var.CoordinateSystem = EarthMJ2000Eq;
+GMAT Sat_Var.DisplayStateType = Keplerian;
+GMAT Sat_Var.SMA = 6578.1363;
+GMAT Sat_Var.ECC = 0;
+GMAT Sat_Var.INC = 30;
+GMAT Sat_Var.RAAN = 0;
+GMAT Sat_Var.AOP = 0;
+GMAT Sat_Var.TA = 0;
+GMAT Sat_Var.Cd = 2.2;
+GMAT Sat_Var.DragArea = 1.6366;      % overwritten every step in the mission sequence
+GMAT Sat_Var.DryMass = 1375.4;
+GMAT Sat_Var.Cr = 1.8;
+GMAT Sat_Var.SRPArea = 1.0;
+GMAT Sat_Var.OrbitColor = [37 125 224];
+GMAT Sat_Var.TargetColor = [37 125 224];
+
+Create Spacecraft Sat_FixMean;
+GMAT Sat_FixMean.DateFormat = UTCGregorian;
+GMAT Sat_FixMean.Epoch = '25 Jan 2025 00:00:00.000';
+GMAT Sat_FixMean.CoordinateSystem = EarthMJ2000Eq;
+GMAT Sat_FixMean.DisplayStateType = Keplerian;
+GMAT Sat_FixMean.SMA = 6578.1363;
+GMAT Sat_FixMean.ECC = 0;
+GMAT Sat_FixMean.INC = 30;
+GMAT Sat_FixMean.RAAN = 0;
+GMAT Sat_FixMean.AOP = 0;
+GMAT Sat_FixMean.TA = 0;
+GMAT Sat_FixMean.Cd = 2.2;
+GMAT Sat_FixMean.DragArea = 1.6366;  % set exactly from Abody/Apanel below
+GMAT Sat_FixMean.DryMass = 1375.4;
+GMAT Sat_FixMean.Cr = 1.8;
+GMAT Sat_FixMean.SRPArea = 1.0;
+GMAT Sat_FixMean.OrbitColor = [244 114 48];
+GMAT Sat_FixMean.TargetColor = [244 114 48];
+
+Create Spacecraft Sat_FixMax;
+GMAT Sat_FixMax.DateFormat = UTCGregorian;
+GMAT Sat_FixMax.Epoch = '25 Jan 2025 00:00:00.000';
+GMAT Sat_FixMax.CoordinateSystem = EarthMJ2000Eq;
+GMAT Sat_FixMax.DisplayStateType = Keplerian;
+GMAT Sat_FixMax.SMA = 6578.1363;
+GMAT Sat_FixMax.ECC = 0;
+GMAT Sat_FixMax.INC = 30;
+GMAT Sat_FixMax.RAAN = 0;
+GMAT Sat_FixMax.AOP = 0;
+GMAT Sat_FixMax.TA = 0;
+GMAT Sat_FixMax.Cd = 2.2;
+GMAT Sat_FixMax.DragArea = 2.0;      % set exactly from Abody/Apanel below
+GMAT Sat_FixMax.DryMass = 1375.4;
+GMAT Sat_FixMax.Cr = 1.8;
+GMAT Sat_FixMax.SRPArea = 1.0;
+GMAT Sat_FixMax.OrbitColor = [0 184 148];
+GMAT Sat_FixMax.TargetColor = [0 184 148];
+
+%----------------------------------------
+%---------- Force model and propagator (same as the BC sweep)
+%----------------------------------------
+
+Create ForceModel DragFM;
+GMAT DragFM.CentralBody = Earth;
+GMAT DragFM.PrimaryBodies = {Earth};
+GMAT DragFM.SRP = Off;
+GMAT DragFM.RelativisticCorrection = Off;
+GMAT DragFM.ErrorControl = RSSStep;
+GMAT DragFM.GravityField.Earth.Degree = 8;
+GMAT DragFM.GravityField.Earth.Order = 8;
+GMAT DragFM.GravityField.Earth.PotentialFile = 'JGM2.cof';
+GMAT DragFM.GravityField.Earth.TideModel = 'None';
+GMAT DragFM.Drag.AtmosphereModel = NRLMSISE00;
+GMAT DragFM.Drag.HistoricWeatherSource = 'ConstantFluxAndGeoMag';
+GMAT DragFM.Drag.PredictedWeatherSource = 'ConstantFluxAndGeoMag';
+GMAT DragFM.Drag.CSSISpaceWeatherFile = 'SpaceWeather-All-v1.2.txt';
+GMAT DragFM.Drag.SchattenFile = 'SchattenPredict.txt';
+GMAT DragFM.Drag.F107 = 150;
+GMAT DragFM.Drag.F107A = 150;
+GMAT DragFM.Drag.MagneticIndex = 3;
+GMAT DragFM.Drag.DragModel = 'Spherical';
+
+Create Propagator DragProp;
+GMAT DragProp.FM = DragFM;
+GMAT DragProp.Type = RungeKutta89;
+GMAT DragProp.InitialStepSize = 60;
+GMAT DragProp.Accuracy = 1e-11;
+GMAT DragProp.MinStep = 0.001;
+GMAT DragProp.MaxStep = 60;
+GMAT DragProp.MaxStepAttempts = 50;
+GMAT DragProp.StopIfAccuracyIsViolated = true;
+
+%----------------------------------------
+%---------- Output
+%----------------------------------------
+
+% Written only by the Report command inside the loop (one row per 60 s).
+% WriteHeaders is off because GMAT repeats the header on every Report line.
+Create ReportFile StateLog;
+GMAT StateLog.Filename = 'VarArea_StateLog.txt';
+GMAT StateLog.Precision = 16;
+GMAT StateLog.WriteHeaders = false;
+GMAT StateLog.LeftJustify = On;
+GMAT StateLog.FixedWidth = true;
+GMAT StateLog.ColumnWidth = 26;
+
+Create XYPlot AltitudePlot;
+GMAT AltitudePlot.SolverIterations = Current;
+GMAT AltitudePlot.UpperLeft = [ 0.5 0 ];
+GMAT AltitudePlot.Size = [ 0.5 0.6 ];
+GMAT AltitudePlot.RelativeZOrder = 0;
+GMAT AltitudePlot.Maximized = false;
+GMAT AltitudePlot.XVariable = Sat_Var.ElapsedDays;
+GMAT AltitudePlot.YVariables = {Sat_Var.Earth.SMA, Sat_FixMean.Earth.SMA, Sat_FixMax.Earth.SMA};
+GMAT AltitudePlot.ShowGrid = true;
+GMAT AltitudePlot.ShowPlot = true;
+
+%----------------------------------------
+%---------- Variables (edit these)
+%----------------------------------------
+
+Create Variable Abody Apanel phi Tend AltStop d2r u;
+
+%----------------------------------------
+%---------- Mission sequence
+%----------------------------------------
+
+BeginMissionSequence;
+
+Abody   = 1.0;     % m^2, body cross-section (always facing the flow)
+Apanel  = 1.0;     % m^2, array area when face-on to the flow
+phi     = 0;       % deg, phase of the array relative to the ascending node
+Tend    = 10;      % days, maximum propagation time
+AltStop = 125;     % km, stop when the truth spacecraft gets this low
+d2r     = 3.141592653589793/180;
+
+Sat_FixMean.DragArea = Abody + Apanel*2/3.141592653589793;
+Sat_FixMax.DragArea  = Abody + Apanel;
+
+% The loop ends when the truth OR the fixed-mean spacecraft gets down to AltStop.
+% The fixed-max spacecraft decays fastest (smallest BC), so it is dropped from
+% the propagation once it reaches AltStop; otherwise it keeps falling into the
+% dense lower atmosphere and the integrator fails (RK89 accuracy exception).
+% After that point its columns in the log stay frozen; the Python script masks them.
+While Sat_Var.ElapsedDays < Tend & Sat_Var.Earth.Altitude > AltStop & Sat_FixMean.Earth.Altitude > AltStop
+
+   % Update the truth spacecraft's area from its current position in orbit
+   u = Sat_Var.EarthMJ2000Eq.AOP + Sat_Var.Earth.TA;
+   Sat_Var.DragArea = Abody + Apanel*abs(cos((u + phi)*d2r));
+
+   Report StateLog Sat_Var.ElapsedDays Sat_Var.DragArea Sat_Var.Earth.Altitude Sat_FixMean.Earth.Altitude Sat_FixMax.Earth.Altitude Sat_Var.Earth.SMA Sat_FixMean.Earth.SMA Sat_FixMax.Earth.SMA Sat_Var.EarthMJ2000Eq.X Sat_Var.EarthMJ2000Eq.Y Sat_Var.EarthMJ2000Eq.Z Sat_Var.EarthMJ2000Eq.VX Sat_Var.EarthMJ2000Eq.VY Sat_Var.EarthMJ2000Eq.VZ Sat_FixMean.EarthMJ2000Eq.X Sat_FixMean.EarthMJ2000Eq.Y Sat_FixMean.EarthMJ2000Eq.Z Sat_FixMean.EarthMJ2000Eq.VX Sat_FixMean.EarthMJ2000Eq.VY Sat_FixMean.EarthMJ2000Eq.VZ Sat_FixMax.EarthMJ2000Eq.X Sat_FixMax.EarthMJ2000Eq.Y Sat_FixMax.EarthMJ2000Eq.Z Sat_FixMax.EarthMJ2000Eq.VX Sat_FixMax.EarthMJ2000Eq.VY Sat_FixMax.EarthMJ2000Eq.VZ;
+
+   % Propagate together for 60 s (area held constant over the step)
+   If Sat_FixMax.Earth.Altitude > AltStop
+      Propagate 'Step 60 s (all three)' DragProp(Sat_Var, Sat_FixMean, Sat_FixMax) {Sat_Var.ElapsedSecs = 60};
+   Else
+      Propagate 'Step 60 s (FixMax landed)' DragProp(Sat_Var, Sat_FixMean) {Sat_Var.ElapsedSecs = 60};
+   EndIf
+
+EndWhile
