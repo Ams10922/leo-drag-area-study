@@ -2,7 +2,7 @@
 
 How much along-track accuracy do you lose by modelling a satellite as a fixed-area "cannonball" when its real cross-section changes through the orbit?
 
-**Status:** work in progress, v0.1 (26 Nov 2026). One case run so far; see [Next steps](#next-steps).
+**Status:** work in progress, v0.1 (26 Nov 2026). Two array phases run at 200 km so far; see [Next steps](#next-steps).
 
 ## Key result (200 km circular orbit, i = 30°)
 
@@ -16,7 +16,14 @@ A fixed drag area equal to the orbit average predicted re-entry time to within a
 
 \*From a separate fixed-area run with the same ballistic coefficient (382 kg/m²).
 
-The variable-area spacecraft also decayed about 1% faster than its own average area predicts. The proposed explanation is that the array is face-on at the equator, where Earth's equatorial bulge puts the spacecraft about 5 km lower, in denser air. A phase sweep to test this is next.
+The variable-area spacecraft also decayed about 1% faster than its own average area predicts. The explanation is that with phi = 0 the array is face-on at the equator, where Earth's equatorial bulge puts the spacecraft about 5 km lower, in denser air. A phase test confirmed it:
+
+| Array phase | Array face-on at | Effective drag bias | Fixed-mean along-track error, day 3 |
+|---|---|---|---|
+| phi = 0 | equator crossings | +1.04% | 30.0 km behind |
+| phi = 90 deg | +/-30 deg latitude | -1.01% | 29.6 km ahead |
+
+Shifting where the area peaks reverses the bias and flips the error, so the timing of the area relative to the density, not just its average, sets the effective drag.
 
 ![Variable vs fixed drag area, 200 km, phi = 0](results/200km_phi0.png)
 
@@ -34,7 +41,8 @@ The full write-up is in the technical note: [docs/technical_note_v0.1.pdf](docs/
 ## Repository layout
 
 ```
-gmat/Drag_VariableArea.script      GMAT mission: three spacecraft, variable-area loop
+gmat/Drag_VariableArea.script      GMAT mission: three spacecraft, variable-area loop (phi = 0, 10 days)
+gmat/Drag_VariableArea_phi90.script  Same, phi = 90 deg, 3 days
 analysis/analyse_variable_area.py  Reads the GMAT log, prints the summary, plots the figure
 results/                           Figures from each run
 docs/                              Technical note (PDF)
@@ -56,7 +64,8 @@ docs/                              Technical note (PDF)
 ## Next steps
 
 - [ ] Null test: `Apanel = 0`, all three orbits must coincide
-- [ ] Phase sweep: phi = 45, 90, 135 deg (prediction: the bias turns negative at 90 deg)
+- [x] Phase test: phi = 90 deg (bias -1.0%, as predicted)
+- [ ] phi = 45 and 135 deg (a difference between them would show the day-night density effect)
 - [ ] 500 km case over 30 days
 - [ ] Area error vs density error: F10.7 = 70 and 250
 - [ ] Attitude-based area table (box + panels, nadir pointing) using GMAT's SPAD drag model
